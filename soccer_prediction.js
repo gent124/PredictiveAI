@@ -99,9 +99,9 @@ class SoccerPredictor {
 
       // Extract features
       const features = data.map((match) => [
-        match.homeGoals,
-        match.awayGoals,
-        match.matchday,
+        match.homeGoals || 0,
+        match.awayGoals || 0,
+        match.matchday || 0,
       ]);
 
       // Extract labels
@@ -116,8 +116,9 @@ class SoccerPredictor {
         );
       }
 
+      // Clean features
       const cleanedFeatures = features.map((row) =>
-        row.map((value) => (value === undefined ? 0 : value))
+        row.map((value) => (isNaN(value) ? 0 : value))
       );
 
       // Check label diversity
@@ -150,67 +151,110 @@ class SoccerPredictor {
 
       this.model.train(X_train, y_train);
 
-      console.log("Model training completed successfully");
+      // Evaluate model
+      const accuracy = this.evaluateModel(X_test, y_test);
+      console.log(`Model trained successfully. Test accuracy: ${accuracy}`);
 
-      // Return test data in Matrix format
-      return {
-        X_test: X_test,
-        y_test: y_test.to2DArray().map((row) => row[0]),
-      };
+      return { model: this.model, accuracy };
     } catch (error) {
-      console.error("Error in model training:", error.message);
+      console.error("Error in training model:", error);
+      throw error;
+    }
+  }
+
+  predict(features) {
+    if (!this.model) {
+      throw new Error("Model not trained yet");
+    }
+
+    try {
+      // Clean and scale the input features
+      const cleanedFeatures = features.map((value) =>
+        isNaN(value) ? 0 : value
+      );
+      const scaledFeatures = this.scaleFeatures([cleanedFeatures])[0];
+
+      // Convert to Matrix format
+      const X = new Matrix([scaledFeatures]);
+
+      // Make prediction
+      const prediction = this.model.predict(X);
+      return prediction;
+    } catch (error) {
+      console.error("Error in prediction:", error);
       throw error;
     }
   }
 
   scaleFeatures(features) {
-    const matrix = new Matrix(features);
-    const means = matrix.mean("column");
-    const stds = matrix.standardDeviation("column");
+    try {
+      if (!features || features.length === 0) {
+        throw new Error("No features to scale");
+      }
 
-    const scaled = matrix
-      .to2DArray()
-      .map((row) => row.map((val, i) => (val - means[i]) / (stds[i] || 1)));
-    return scaled;
+      // Initialize scaler if not exists
+      if (!this.scaler) {
+        this.scaler = {
+          mean: Array(features[0].length).fill(0),
+          std: Array(features[0].length).fill(1),
+        };
+
+        // Calculate mean
+        features.forEach((row) => {
+          row.forEach((val, j) => {
+            this.scaler.mean[j] += val;
+          });
+        });
+        this.scaler.mean = this.scaler.mean.map((sum) => sum / features.length);
+
+        // Calculate standard deviation
+        features.forEach((row) => {
+          row.forEach((val, j) => {
+            this.scaler.std[j] += Math.pow(val - this.scaler.mean[j], 2);
+          });
+        });
+        this.scaler.std = this.scaler.std.map(
+          (sum) => Math.sqrt(sum / features.length) || 1
+        );
+      }
+
+      // Scale features
+      return features.map((row) =>
+        row.map((val, j) => (val - this.scaler.mean[j]) / this.scaler.std[j])
+      );
+    } catch (error) {
+      console.error("Error in scaling features:", error);
+      throw error;
+    }
   }
 
   evaluateModel(X_test, y_test) {
-    if (!this.model) {
-      throw new Error("Model has not been trained yet");
-    }
-
     try {
-      // Convert X_test to Matrix format if it's not already
-      const X_test_matrix = Matrix.isMatrix(X_test)
-        ? X_test
-        : new Matrix(X_test);
+      if (!this.model) {
+        throw new Error("Model not trained yet");
+      }
 
-      // Make predictions
-      const predictions = this.model.predict(X_test_matrix);
+      // Make predictions on test set
+      const predictions = this.model.predict(X_test);
+
+      // Convert predictions and actual values to arrays
+      const predictedLabels = predictions;
+      const actualLabels = y_test.to2DArray().map((row) => row[0]);
 
       // Calculate accuracy
-      const correct = predictions.filter(
-        (pred, i) => pred === y_test[i]
-      ).length;
-      const accuracy = correct / predictions.length;
+      let correct = 0;
+      for (let i = 0; i < actualLabels.length; i++) {
+        if (predictedLabels[i] === actualLabels[i]) {
+          correct++;
+        }
+      }
 
-      console.log(`Model Accuracy: ${(accuracy * 100).toFixed(2)}%`);
-
-      // Create confusion matrix
-      const confusionMatrix = Array(3)
-        .fill()
-        .map(() => Array(3).fill(0));
-      predictions.forEach((pred, i) => {
-        confusionMatrix[y_test[i]][pred]++;
-      });
-
-      console.log("Confusion Matrix:");
-      console.log(confusionMatrix);
-
+      const accuracy = correct / actualLabels.length;
       return accuracy;
     } catch (error) {
       console.error("Error in model evaluation:", error);
-      throw error;
+      // Return a default accuracy instead of throwing
+      return 0;
     }
   }
 }
@@ -227,10 +271,10 @@ async function main() {
     const processedData = predictor.preprocessData(matches);
 
     console.log("Training model...");
-    const { X_test, y_test } = predictor.trainModel(processedData);
+    const { model, accuracy } = predictor.trainModel(processedData);
 
     console.log("Evaluating model...");
-    predictor.evaluateModel(X_test, y_test);
+    console.log(`Model trained successfully. Test accuracy: ${accuracy}`);
   } catch (error) {
     console.error("An error occurred in the main process:", error.message);
   }
