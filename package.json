@@ -1,0 +1,24 @@
+{
+  "name": "soccer-prediction",
+  "version": "1.0.0",
+  "description": "Soccer match prediction system",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "train": "node scripts/train_model.js",
+    "fetch-data": "node scripts/fetch_data.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "ml-cross-validation": "^1.3.0",
+    "ml-logistic-regression": "^2.0.0",
+    "ml-matrix": "^6.12.0",
+    "express": "^4.18.2",
+    "mongoose": "^8.0.3",
+    "node-cron": "^3.0.3",
+    "winston": "^3.11.0",
+    "dotenv": "^16.3.1",
+    "cors": "^2.8.5"
+  }
+}
